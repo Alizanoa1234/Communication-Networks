@@ -26,14 +26,14 @@ class PacketAnalyzer:
                         'tls_version': pkt.tls.record_version if hasattr(pkt, 'tls') else None
                     }
 
-                    # Extract TCP fields (Convert to numeric values)
+                    # Extract TCP fields (Ensure proper conversion)
                     if hasattr(pkt, 'tcp'):
                         try:
                             packet_data.update({
                                 'tcp_seq': int(pkt.tcp.seq) if pkt.tcp.seq.isnumeric() else None,
                                 'tcp_ack': int(pkt.tcp.ack) if pkt.tcp.ack.isnumeric() else None,
                                 'tcp_window': int(pkt.tcp.window_size) if pkt.tcp.window_size.isnumeric() else None,
-                                'tcp_flags': int(pkt.tcp.flags, 16) if pkt.tcp.flags.isnumeric() else None
+                                'tcp_flags': int(pkt.tcp.flags, 16) if hasattr(pkt.tcp, 'flags') else None
                                 # Convert hex flags to int
                             })
                         except Exception:
@@ -58,7 +58,9 @@ class PacketAnalyzer:
                     continue  # Skip problematic packets
 
             cap.close()
-            return pd.DataFrame(packets)
+            df = pd.DataFrame(packets)
+            df.to_csv(f"results/{self.pcap_file.split('/')[-1].replace('.pcapng', '')}_parsed_data.csv", index=False)
+            return df
 
         except Exception as e:
             print(f"❌ Error reading file {self.pcap_file}: {e}")
