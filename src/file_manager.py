@@ -11,3 +11,5 @@ class FileManager:
         if not os.path.isfile(file_path):
             print(f"❌ Error: File {file_path} not found.")
             sys.exit(1)
+        else:
+            print(f"✅ File {file_path} found successfully.")
