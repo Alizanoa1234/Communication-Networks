@@ -1,141 +1,99 @@
 import pyshark
 import pandas as pd
 import os
-import numpy as np
-import entropy
 import logging
+from pathlib import Path
+from collections import defaultdict
+from data_processor import DataProcessor
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Define data directories
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = BASE_DIR / "data"
+RESULTS_DIR = BASE_DIR / "results"
+CSV_DIR = RESULTS_DIR / "CSV_files"
+GRAPH_DIR = RESULTS_DIR / "Graphs"
+
+# Ensure necessary directories exist
+os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(CSV_DIR, exist_ok=True)
+os.makedirs(GRAPH_DIR, exist_ok=True)
 
 
 class PacketAnalyzer:
 	def __init__(self, pcap_file):
 		self.pcap_file = pcap_file
+		self.flows = defaultdict(lambda: {'size': 0, 'volume': 0, 'last_timestamp': None})
 
 	def extract_features(self):
 		"""
-		Reads a PCAP/PCAPNG file using PyShark and extracts packet features including TCP & TLS headers.
+		Reads a PCAP file using PyShark and extracts packet features, including Flow-Level and Traffic-Level features.
 		"""
 		try:
-			logging.info(f"📂 Opening PCAP file: {self.pcap_file}")
 			cap = pyshark.FileCapture(self.pcap_file, keep_packets=False)
 			packets = []
-			flows = {}
-			previous_timestamp = None
-			logging.info("🔍 Processing packets...")
 
 			for pkt in cap:
 				try:
-					packet_data = {}
-					packet_data['packet_size'] = int(pkt.length) if hasattr(pkt, 'length') else None
-					packet_data['timestamp'] = float(pkt.sniff_timestamp) if hasattr(pkt, 'sniff_timestamp') else None
-					packet_data['protocol'] = pkt.highest_layer if hasattr(pkt, 'highest_layer') else None
-					packet_data['ip_src'] = pkt.ip.src if hasattr(pkt, 'ip') else None
-					packet_data['ip_dst'] = pkt.ip.dst if hasattr(pkt, 'ip') else None
-					packet_data['transport'] = pkt.transport_layer if hasattr(pkt, 'transport_layer') else None
-					packet_data['tls_version'] = pkt.tls.record_version if hasattr(pkt, 'tls') else None
+					flow_key = (pkt.ip.src if hasattr(pkt, 'ip') else None,
+								pkt.ip.dst if hasattr(pkt, 'ip') else None,
+								pkt.transport_layer if hasattr(pkt, 'transport_layer') else None,
+								pkt[pkt.transport_layer].srcport if hasattr(pkt, pkt.transport_layer) else None,
+								pkt[pkt.transport_layer].dstport if hasattr(pkt, pkt.transport_layer) else None)
 
-					if hasattr(pkt, 'tcp'):
-						try:
-							packet_data.update({
-								'tcp_seq': int(pkt.tcp.seq) if pkt.tcp.seq.isdigit() else None,
-								'tcp_ack': int(pkt.tcp.ack) if pkt.tcp.ack.isdigit() else None,
-								'tcp_window': int(pkt.tcp.window_size) if pkt.tcp.window_size.isdigit() else None,
-								'tcp_flags': int(pkt.tcp.flags, 16) if hasattr(pkt.tcp, 'flags') else None,
-								'tcp_srcport': int(pkt.tcp.srcport) if pkt.tcp.srcport.isdigit() else None,
-								'tcp_dstport': int(pkt.tcp.dstport) if pkt.tcp.dstport.isdigit() else None
-							})
-						except Exception as e:
-							logging.warning(f"⚠ Error extracting TCP fields: {e}")
-							packet_data.update({
-								'tcp_seq': None,
-								'tcp_ack': None,
-								'tcp_window': None,
-								'tcp_flags': None
-							})
+					packet_data = {
+						'packet_size': int(pkt.length),
+						'timestamp': float(pkt.sniff_timestamp),
+						'protocol': pkt.highest_layer,
+						'ip_src': pkt.ip.src if hasattr(pkt, 'ip') else None,
+						'ip_dst': pkt.ip.dst if hasattr(pkt, 'ip') else None,
+						'transport': pkt.transport_layer if hasattr(pkt, 'transport_layer') else None,
+						'tls_version': pkt.tls.record_version if hasattr(pkt, 'tls') else None,
+						'tcp_seq': int(pkt.tcp.seq) if hasattr(pkt, 'tcp') and pkt.tcp.seq.isnumeric() else None,
+						'tcp_ack': int(pkt.tcp.ack) if hasattr(pkt, 'tcp') and pkt.tcp.ack.isnumeric() else None,
+						'tcp_window': int(pkt.tcp.window_size) if hasattr(pkt,
+																		  'tcp') and pkt.tcp.window_size.isnumeric() else None,
+						'tcp_flags': int(pkt.tcp.flags, 16) if hasattr(pkt, 'tcp') and hasattr(pkt.tcp,
+																							   'flags') else None,
+						'tls_handshake_type': int(pkt.tls.handshake_type) if hasattr(pkt, 'tls') and hasattr(pkt.tls,
+																											 'handshake_type') else None,
+						'tls_cipher_suite': pkt.tls.cipher_suite if hasattr(pkt, 'tls') and hasattr(pkt, 'tls',
+																									'cipher_suite') else None
+					}
 
-					if hasattr(pkt, 'tls'):
-						packet_data.update({
-							'tls_handshake_type': int(pkt.tls.handshake_type) if hasattr(pkt.tls,
-																						 'handshake_type') else None,
-							'tls_cipher_suite': pkt.tls.cipher_suite if hasattr(pkt.tls, 'cipher_suite') else None
-						})
+					# Calculate Flow-Level Features
+					self.flows[flow_key]['size'] += packet_data['packet_size']
+					self.flows[flow_key]['volume'] += 1
+					packet_data['flow_size'] = self.flows[flow_key]['size']
+					packet_data['flow_volume'] = self.flows[flow_key]['volume']
 
-					if hasattr(pkt, 'dns'):
-						packet_data['dns_query'] = pkt.dns.qry_name if hasattr(pkt.dns, 'qry_name') else None
-
-					# Calculate inter-packet time
-					if previous_timestamp:
-						packet_data['inter_packet_time'] = packet_data['timestamp'] - previous_timestamp
+					# Calculate Inter-Packet Time
+					if self.flows[flow_key]['last_timestamp'] is not None:
+						packet_data['inter_packet_time'] = packet_data['timestamp'] - self.flows[flow_key][
+							'last_timestamp']
 					else:
 						packet_data['inter_packet_time'] = None
-					previous_timestamp = packet_data['timestamp']
-
-					# Track flow size and volume
-					flow_key = (packet_data['ip_src'], packet_data['ip_dst'], packet_data['transport'])
-					if flow_key not in flows:
-						flows[flow_key] = {'size': 0, 'volume': 0, 'packet_count': 0}
-					flows[flow_key]['size'] += 1
-					flows[flow_key]['volume'] += packet_data['packet_size'] if packet_data['packet_size'] else 0
-					flows[flow_key]['packet_count'] += 1
-					packet_data['flow_size'] = flows[flow_key]['size']
-					packet_data['flow_volume'] = flows[flow_key]['volume']
-					packet_data['packets_per_flow'] = flows[flow_key]['packet_count']
-
-					# TCP retransmissions detection
-					if 'tcp_seq' in packet_data and packet_data['tcp_seq'] in flows:
-						packet_data['tcp_retransmissions'] = flows[packet_data['tcp_seq']]['size']
-					else:
-						packet_data['tcp_retransmissions'] = 0
-					flows[packet_data['tcp_seq']] = {'size': 1}
-
-					# TLS Certificate Info
-					if hasattr(pkt, 'tls') and hasattr(pkt.tls, 'handshake_certificate'):
-						packet_data['tls_cert_subject'] = pkt.tls.handshake_certificate_subject if hasattr(pkt.tls,
-																										   'handshake_certificate_subject') else None
-						packet_data['tls_cert_issuer'] = pkt.tls.handshake_certificate_issuer if hasattr(pkt.tls,
-																										 'handshake_certificate_issuer') else None
-
-					# HTTP Headers
-					if hasattr(pkt, 'http'):
-						packet_data['http_host'] = pkt.http.host if hasattr(pkt.http, 'host') else None
-						packet_data['http_user_agent'] = pkt.http.user_agent if hasattr(pkt.http,
-																						'user_agent') else None
-
-					# Calculate payload entropy
-					if hasattr(pkt, 'data') and hasattr(pkt.data, 'data'):
-						raw_payload = bytes.fromhex(pkt.data.data.replace(':', ''))
-						packet_data['payload_entropy'] = entropy.shannon_entropy(raw_payload)
-					else:
-						packet_data['payload_entropy'] = None
+					self.flows[flow_key]['last_timestamp'] = packet_data['timestamp']
 
 					packets.append(packet_data)
-				except Exception as e:
-					#logging.warning(f"⚠ Error processing packet: {e}")
-					continue
+
+				except Exception:
+					continue  # Skip problematic packets
 
 			cap.close()
-			logging.info("🔚 Closing the PCAP file.")
 			df = pd.DataFrame(packets)
-			logging.info("📊 Converting packet data to DataFrame.")
 
-			# Convert numeric columns properly
-			numeric_columns = ['packet_size', 'tcp_seq', 'tcp_ack', 'tcp_window', 'tcp_flags', 'tls_handshake_type',
-							   'inter_packet_time', 'flow_size', 'flow_volume', 'packets_per_flow',
-							   'tcp_retransmissions']
-			for col in numeric_columns:
-				if col in df.columns:
-					df[col] = pd.to_numeric(df[col], errors='coerce')
+			# Clean the dataframe using DataProcessor
+			df = DataProcessor.clean_dataframe(df)
 
-			# Handle categorical columns
-			categorical_columns = ['protocol', 'ip_src', 'ip_dst', 'transport', 'tls_version', 'tls_cipher_suite',
-								   'dns_query']
-			for col in categorical_columns:
-				if col in df.columns:
-					df[col] = df[col].astype(str).replace({'nan': 'Unknown', 'None': 'Unknown'})
+			# Save to CSV
+			output_csv = CSV_DIR / f"{Path(self.pcap_file).stem}_parsed_data.csv"
+			DataProcessor.save_dataframe_to_csv(df, output_csv)
 
-			logging.info("✅ Final DataFrame preview before saving:")
-			logging.info(df.head())
 			return df
 
 		except Exception as e:
 			logging.error(f"❌ Error reading file {self.pcap_file}: {e}")
-			return pd.DataFrame()
+			return pd.DataFrame()  # Return empty DataFrame if error occurs

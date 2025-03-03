@@ -1,145 +1,112 @@
 import os
 import argparse
-import sys
-
+from pathlib import Path
 import pandas as pd
-import logging
 from file_manager import FileManager
 from packet_analyzer import PacketAnalyzer
 from traffic_visualizer import TrafficVisualizer
 
-# Configure logging for structured output
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 # Define data directories
-DATA_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
-OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'results'))
-CSV_DIR = os.path.join(OUTPUT_DIR, 'CSV_files')
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = BASE_DIR / "data"
+RESULTS_DIR = BASE_DIR / "results"
+CSV_DIR = RESULTS_DIR / "CSV_files"
+GRAPH_DIR = RESULTS_DIR / "Graphs"
+COMPARE_DIR = RESULTS_DIR / "Graphs/compare"
 
-# Ensure the results and CSV directories exist
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(CSV_DIR, exist_ok=True)
+# Define required columns for comparison CSV
+REQUIRED_COLUMNS = [
+    "Application", "Avg_Packet_Size", "TCP_Seq_Count", "TCP_Window_Size_Avg", "TLS_Handshake_Count",
+    "Primary_Protocol", "Flow_Size (Bytes)", "Flow_Volume (Packets)", "Inter_Packet_Time_Mean",
+    "TLS_Version", "TLS_Cipher_Suite", "Packet_Loss_Rate", "Flow_Size"
+]
 
-
-def process_pcap_file(pcap_file, save_csv):
-    """Processes a single PCAPNG file: extracts data, saves CSV, and generates graphs."""
-    app_name = os.path.splitext(os.path.basename(pcap_file))[0]
+def process_pcap_file(pcap_file):
+    """Processes a single .pcapng file, extracts data, and generates graphs."""
+    app_name = os.path.splitext(pcap_file)[0]  # Extracts application name from the file
     pcap_path = os.path.join(DATA_DIR, pcap_file)
 
-    logging.info(f"📂 Accessing file: {pcap_path}")
+    print(f"📊 Processing {pcap_file}...")
 
-    # Validate and handle potential file issues
-    try:
-        FileManager.validate_file(pcap_path)
-    except Exception as e:
-        logging.error(f"❌ Error validating file {pcap_file}: {e}")
-        return None
-
-    # Analyze network traffic
-    try:
-        analyzer = PacketAnalyzer(pcap_path)
-        df = analyzer.extract_features()
-    except Exception as e:
-        logging.error(f"❌ Error reading PCAP {pcap_file}: {e}")
-        return None
-
-    print(f"🔍 Debug: save_csv={save_csv}")  # בדיקה אם המשתנה בכלל True
-    print(f"🔍 Debug: df.shape={df.shape}")  # לבדוק אם ה-DataFrame ריק או לא
+    # Validate and analyze the file
+    FileManager.validate_file(pcap_path)
+    analyzer = PacketAnalyzer(pcap_path)
+    df = analyzer.extract_features()
 
     if df.empty:
-        logging.warning(f"⚠ No data extracted from {pcap_file}. Skipping.")
-        print(f"⚠ DataFrame is empty for {pcap_file}, skipping save to CSV.")  # Debugging
+        print(f"⚠ No data extracted from {pcap_file}. Skipping...")
         return None
 
-    # Ensure CSV directory exists
-    CSV_DIR = os.path.join(OUTPUT_DIR, 'CSV_files')
-    if not os.path.exists(CSV_DIR):
-        logging.info(f"📂 Directory {CSV_DIR} does not exist. Creating it now...")
-        os.makedirs(CSV_DIR, exist_ok=True)
+    # Generate graphs for the application
+    TrafficVisualizer.plot_traffic_characteristics(df, app_name, GRAPH_DIR)
 
-    # Save extracted data to CSV if required
-    if save_csv:
-        csv_filename = f"{app_name}_traffic.csv"
-        csv_path = os.path.join(CSV_DIR, csv_filename)
+    # Compute key metrics for comparison
+    comparison_data = {
+        "Application": app_name,
+        "Avg_Packet_Size": df['packet_size'].mean(),
+        "TCP_Seq_Count": df['tcp_seq'].nunique() if 'tcp_seq' in df.columns else None,
+        "TCP_Window_Size_Avg": df['tcp_window'].mean() if 'tcp_window' in df.columns else None,
+        "TLS_Handshake_Count": df['tls_handshake_type'].nunique() if 'tls_handshake_type' in df.columns else None,
+        "Primary_Protocol": df['transport'].mode()[0] if 'transport' in df.columns else "Unknown",
+        "Flow_Size (Bytes)": df['flow_size'].sum() if 'flow_size' in df.columns else None,
+        "Flow_Volume (Packets)": df['flow_volume'].sum() if 'flow_volume' in df.columns else None,
+        "Inter_Packet_Time_Mean": df['inter_packet_time'].mean() if 'inter_packet_time' in df.columns else None,
+        "TLS_Version": df['tls_version'].mode()[0] if 'tls_version' in df.columns else "Unknown",
+        "TLS_Cipher_Suite": df['tls_cipher_suite'].mode()[0] if 'tls_cipher_suite' in df.columns else "Unknown",
+        "Packet_Loss_Rate": 1 - (df.shape[0] / (df['flow_volume'].sum() if 'flow_volume' in df.columns else 1)),
+        "Flow_Size": df['packet_size'].sum() if 'packet_size' in df.columns else None  # Newly added Flow_Size metric
+    }
 
-        logging.info(f"💾 Attempting to save CSV to: {csv_path}")
-        print(f"💾 Debug: Trying to save CSV to {csv_path}")  # Debugging
+    return comparison_data
 
-        try:
-            df.to_csv(csv_path, index=False)
-            logging.info(f"✅ CSV saved successfully: {csv_path}")
-            print(f"✅ CSV saved successfully: {csv_path}")  # Debugging
-        except Exception as e:
-            logging.error(f"❌ Error saving CSV: {e}")
-            print(f"❌ Error saving CSV: {e}")  # Debugging
+def main(input_file=None):
+    """Runs analysis on a single file (if specified) or processes all .pcapng files."""
+    # Ensure necessary directories exist
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(CSV_DIR, exist_ok=True)
+    os.makedirs(GRAPH_DIR, exist_ok=True)
+    os.makedirs(COMPARE_DIR, exist_ok=True)  # Creates directory for comparison graphs
 
-    # Generate traffic visualizations
-    try:
-        TrafficVisualizer.plot_traffic_characteristics(df, app_name, OUTPUT_DIR)
-    except Exception as e:
-        logging.error(f"❌ Error generating graphs for {app_name}: {e}")
-
-    return df
-
-
-def main(input_file=None, save_csv=True):
-    """Processes a single file (if provided) or all PCAP files in the directory."""
-    print("✅ main.py started execution")
-    logging.info("✅ main.py started execution")
-
-    logging.info(f"📂 Ensuring output directory exists: {OUTPUT_DIR}")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    os.makedirs(CSV_DIR, exist_ok=True)  # Ensure CSV directory exists
-
-    if not os.path.exists(DATA_DIR) or not os.listdir(DATA_DIR):
-        logging.error("⚠ The 'data/' directory is empty or missing. Please add PCAP files.")
-        return
-
-    all_dfs = []
+    results = []
 
     if input_file:
-        df = process_pcap_file(input_file, save_csv)
-        if df is not None:
-            all_dfs.append(df)
+        results.append(process_pcap_file(input_file))
     else:
+        # Process all .pcapng files in the directory
         pcap_files = [f for f in os.listdir(DATA_DIR) if f.endswith(".pcapng")]
+
         if not pcap_files:
-            logging.error("⚠ No PCAP files found in 'data/' directory.")
+            print("⚠ No .pcapng files found in data/ directory. Please add some recordings.")
             return
 
         for pcap_file in pcap_files:
-            df = process_pcap_file(pcap_file, save_csv)
-            if df is not None:
-                all_dfs.append(df)
+            result = process_pcap_file(pcap_file)
+            if result:
+                results.append(result)
 
-    # Generate statistical summary of extracted data
-    if all_dfs:
-        full_df = pd.concat(all_dfs, ignore_index=True)
-        logging.info("📊 Statistical summary of extracted data:")
-        logging.info(full_df.describe().to_string())
+    # Save comparison results to CSV
+    comparison_csv = os.path.join(CSV_DIR, "comparison_results.csv")
+    if results:
+        df_comparison = pd.DataFrame(results)
 
+        # Ensure all required columns are present
+        for col in REQUIRED_COLUMNS:
+            if col not in df_comparison.columns:
+                df_comparison[col] = None
+
+        df_comparison.to_csv(comparison_csv, index=False)
+        print(f"✅ Analysis completed! Results saved in {comparison_csv}")
+
+    # Generate comparison graphs after CSV creation
+    if os.path.exists(comparison_csv):
+        print("📊 Generating comparison graphs...")
+        TrafficVisualizer.compare_results(comparison_csv, COMPARE_DIR)
+    else:
+        print("⚠ No comparison CSV found! Skipping comparison graphs.")
 
 if __name__ == "__main__":
-    logging.info("✅ main.py started execution")
-
-    # Use argparse to handle command-line arguments
     parser = argparse.ArgumentParser(description="Network Traffic Analysis and Classification")
-    parser.add_argument("-i", "--input", type=str,
-                        help="Process a single PCAPNG file (if not provided, all will be processed)")
-    parser.add_argument("--save-csv", action="store_true", help="Save extracted data to a CSV file")
+    parser.add_argument("-i", "--input", type=str, help="Process a single .pcapng file (leave empty to process all)")
+    args = parser.parse_args()
 
-    # If command-line arguments exist, use them; otherwise, set defaults
-    if len(sys.argv) > 1:
-        args = parser.parse_args()
-        save_csv_flag = args.save_csv
-        input_file = args.input
-    else:
-        print("🔍 No command-line arguments detected. Using default settings.")
-        logging.info("🔍 No command-line arguments detected. Using default settings.")
-        save_csv_flag = True  # Default: Always save CSV
-        input_file = None  # Default: Process all files
-
-    # Run the main function with the specified parameters
-    main(input_file=input_file, save_csv=save_csv_flag)
-    logging.info(f"🔍 Debug: save_csv={save_csv_flag}")
-
+    main(args.input)
