@@ -208,8 +208,7 @@ class TrafficVisualizer:
         # Compare Flow Volume - Shows how many packets each application transmitted.
         # Useful for distinguishing between chatty applications (many small packets) vs. bulk transfers.
         plt.figure(figsize=(12, 6))
-        sns.barplot(x="Application", y="Flow_Volume (Packets)", hue="Application", data=df, palette="viridis",
-                    legend=False)
+        sns.barplot(x="Application", y="Flow_Volume (Packets)", hue="Application", data=df, palette="viridis",legend=False)
         plt.title("Comparison of Flow Volume Between Applications")
         plt.ylabel("Total Flow Volume (Packets)")
         plt.xticks(rotation=45)
