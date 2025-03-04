@@ -37,8 +37,12 @@ def process_pcap_file(pcap_file):
         print(f"⚠ No data extracted from {pcap_file}. Skipping...")
         return None
 
-    # Generate graphs for the application
-    TrafficVisualizer.plot_traffic_characteristics(df, app_name, GRAPH_DIR)
+    # Add RTT and TCP Flags to DataFrame if they are not already included
+    if 'rtt' not in df.columns:
+        df['rtt'] = df.apply(lambda row: row['inter_packet_time'] if row['tcp_flags'] == 16 else None, axis=1)
+
+    if 'tcp_flags' not in df.columns:
+        df['tcp_flags'] = df['tcp_flags'].fillna("None")
 
     # Compute key metrics for comparison
     comparison_data = {
@@ -54,7 +58,9 @@ def process_pcap_file(pcap_file):
         "TLS_Version": df['tls_version'].mode()[0] if 'tls_version' in df.columns else "Unknown",
         "TLS_Cipher_Suite": df['tls_cipher_suite'].mode()[0] if 'tls_cipher_suite' in df.columns else "Unknown",
         "Packet_Loss_Rate": 1 - (df.shape[0] / (df['flow_volume'].sum() if 'flow_volume' in df.columns else 1)),
-        "Flow_Size": df['packet_size'].sum() if 'packet_size' in df.columns else None  # Newly added Flow_Size metric
+        "Flow_Size": df['packet_size'].sum() if 'packet_size' in df.columns else None,
+        "RTT": df['rtt'].mean() if 'rtt' in df.columns else None,  # Newly added RTT column
+        "TCP_Flags": df['tcp_flags'].mode()[0] if 'tcp_flags' in df.columns else "Unknown"  # Newly added TCP Flags column
     }
 
     return comparison_data
@@ -110,3 +116,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.input)
+
