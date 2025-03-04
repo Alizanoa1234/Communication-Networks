@@ -28,7 +28,7 @@ Communication-Networks---final-project/
 │── processed_data/         # Databases
 │   ├── data_with_new_features.csv # Filtered data
 │   └── dataset.csv # Original data
-│── results/                # Stores graphs, results, and comparison files
+│── res/                # Stores graphs, res, and comparison files
 │   ├── CSV_files/
 │   │   ├── 2ZOOM_parsed_data.csv
 │   │   ├── CHROME_parsed_data.csv

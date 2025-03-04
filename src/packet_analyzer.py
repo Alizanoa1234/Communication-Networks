@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Define data directories
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
-RESULTS_DIR = BASE_DIR / "results"
+RESULTS_DIR = BASE_DIR / "res"
 CSV_DIR = RESULTS_DIR / "CSV_files"
 GRAPH_DIR = RESULTS_DIR / "Graphs"
 

@@ -29,11 +29,11 @@ class TrafficClassifier:
 		# Step 5: Add the predictions to the DataFrame
 		df_comparison['Predicted_Type'] = predictions
 
-		# Step 6: Display the results
-		print("🔹 Model prediction results:")
+		# Step 6: Display the res
+		print("🔹 Model prediction res:")
 		print(df_comparison[['TYPE', 'Predicted_Type']])
 
-		# Optionally, save the results to a new CSV file
+		# Optionally, save the res to a new CSV file
 		output_csv = comparison_csv.replace("comparison_results.csv", "classified_results.csv")
 		df_comparison.to_csv(output_csv, index=False)
 		print(f"✅ Results saved in file: {output_csv}")

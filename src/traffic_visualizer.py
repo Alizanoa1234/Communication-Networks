@@ -95,9 +95,9 @@ class TrafficVisualizer:
 
 
     @staticmethod
-    def compare_results(csv_file, output_dir="results/graphs/compare/"):
+    def compare_results(csv_file, output_dir="res/graphs/compare/"):
         """
-        Generates comparison bar charts from the results CSV file.
+        Generates comparison bar charts from the res CSV file.
         """
         if not os.path.exists(csv_file):
             print("⚠ No comparison CSV file found. Run the analysis first.")
@@ -178,4 +178,4 @@ class TrafficVisualizer:
         plt.savefig(f"{output_dir}/feature_correlation_heatmap.png")
         plt.close()
 
-        print("✅ Comparison graphs saved in results/ folder.")
+        print("✅ Comparison graphs saved in res/ folder.")

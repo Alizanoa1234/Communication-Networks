@@ -12,7 +12,7 @@ import joblib
 # Define data directories
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
-RESULTS_DIR = BASE_DIR / "results"
+RESULTS_DIR = BASE_DIR / "res"
 CSV_DIR = RESULTS_DIR / "CSV_files"
 GRAPH_DIR = RESULTS_DIR / "Graphs"
 COMPARE_DIR = RESULTS_DIR / "Graphs/compare"
@@ -150,7 +150,7 @@ def main(input_file=None, action_type="classification"):
 			df_comparison = pd.read_csv(comparison_csv)
 			classifier.evaluate_predictions(df_comparison)
 		else:
-			print("⚠ No comparison results CSV found, skipping classification.")
+			print("⚠ No comparison res CSV found, skipping classification.")
 
 	if action_type == "analysis":
 		# If only analysis is required, skip classification
