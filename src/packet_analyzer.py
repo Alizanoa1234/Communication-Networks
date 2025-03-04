@@ -23,82 +23,103 @@ os.makedirs(GRAPH_DIR, exist_ok=True)
 
 
 class PacketAnalyzer:
-    def __init__(self, pcap_file):
-        self.pcap_file = pcap_file
-        self.flows = defaultdict(lambda: {'size': 0, 'volume': 0, 'last_timestamp': None, 'rtt_sum': 0, 'rtt_count': 0})
+	def __init__(self, pcap_file):
+		self.pcap_file = pcap_file
+		self.flows = defaultdict(lambda: {'size': 0, 'volume': 0, 'last_timestamp': None})
 
-    def extract_features(self):
+	def extract_features(self):
+		"""
+        Reads a PCAP file using PyShark and extracts packet features,
+        including Flow-Level and Traffic-Level features.
+
+        Returns:
+            pd.DataFrame: Dataframe containing extracted traffic data.
         """
-        Reads a PCAP file using PyShark and extracts packet features, including Flow-Level and Traffic-Level features.
-        """
-        try:
-            cap = pyshark.FileCapture(self.pcap_file, keep_packets=False)
-            packets = []
+		try:
+			# Open the pcap file with PyShark (no packet buffering for faster parsing)
+			cap = pyshark.FileCapture(self.pcap_file, keep_packets=False)
 
-            for pkt in cap:
-                try:
-                    # Flow identification based on IP addresses and ports
-                    flow_key = (pkt.ip.src if hasattr(pkt, 'ip') else None,
-                                pkt.ip.dst if hasattr(pkt, 'ip') else None,
-                                pkt.transport_layer if hasattr(pkt, 'transport_layer') else None,
-                                pkt[pkt.transport_layer].srcport if hasattr(pkt, pkt.transport_layer) else None,
-                                pkt[pkt.transport_layer].dstport if hasattr(pkt, pkt.transport_layer) else None)
+			packets = []
 
-                    packet_data = {
-                        'packet_size': int(pkt.length),
-                        'timestamp': float(pkt.sniff_timestamp),
-                        'protocol': pkt.highest_layer,
-                        'ip_src': pkt.ip.src if hasattr(pkt, 'ip') else None,
-                        'ip_dst': pkt.ip.dst if hasattr(pkt, 'ip') else None,
-                        'transport': pkt.transport_layer if hasattr(pkt, 'transport_layer') else None,
-                        'tls_version': pkt.tls.record_version if hasattr(pkt, 'tls') else None,
-                        'tcp_seq': int(pkt.tcp.seq) if hasattr(pkt, 'tcp') and pkt.tcp.seq.isnumeric() else None,
-                        'tcp_ack': int(pkt.tcp.ack) if hasattr(pkt, 'tcp') and pkt.tcp.ack.isnumeric() else None,
-                        'tcp_window': int(pkt.tcp.window_size) if hasattr(pkt, 'tcp') and pkt.tcp.window_size.isnumeric() else None,
-                        'tcp_flags': int(pkt.tcp.flags, 16) if hasattr(pkt, 'tcp') and hasattr(pkt.tcp, 'flags') else None,
-                        'tls_handshake_type': int(pkt.tls.handshake_type) if hasattr(pkt, 'tls') and hasattr(pkt.tls, 'handshake_type') else None,
-                        'tls_cipher_suite': pkt.tls.cipher_suite if hasattr(pkt, 'tls') and hasattr(pkt.tls, 'cipher_suite') else None
-                    }
+			for pkt in cap:
+				try:
+					# Ensure packet has IP and Transport Layer
+					if not hasattr(pkt, 'ip') or not hasattr(pkt, 'transport_layer'):
+						continue  # Skip packets without these layers
 
-                    # Calculate Flow-Level Features
-                    self.flows[flow_key]['size'] += packet_data['packet_size']
-                    self.flows[flow_key]['volume'] += 1
-                    packet_data['flow_size'] = self.flows[flow_key]['size']
-                    packet_data['flow_volume'] = self.flows[flow_key]['volume']
+					# Identify flow key (5-tuple: src IP, dst IP, protocol, src port, dst port)
+					flow_key = (
+						pkt.ip.src,
+						pkt.ip.dst,
+						pkt.transport_layer,
+						pkt[pkt.transport_layer].srcport if hasattr(pkt, pkt.transport_layer) else None,
+						pkt[pkt.transport_layer].dstport if hasattr(pkt, pkt.transport_layer) else None,
+					)
 
-                    # Calculate RTT
-                    if self.flows[flow_key]['last_timestamp'] is not None:
-                        packet_data['inter_packet_time'] = packet_data['timestamp'] - self.flows[flow_key]['last_timestamp']
-                        if packet_data['tcp_flags'] and (packet_data['tcp_flags'] == 16):  # ACK flag
-                            self.flows[flow_key]['rtt_sum'] += packet_data['inter_packet_time']
-                            self.flows[flow_key]['rtt_count'] += 1
-                    else:
-                        packet_data['inter_packet_time'] = None
-                    self.flows[flow_key]['last_timestamp'] = packet_data['timestamp']
+					# Extract basic packet features
+					packet_data = {
+						'timestamp': float(pkt.sniff_timestamp),
+						'packet_size': int(pkt.length),
+						'protocol': pkt.highest_layer,
+						'ip_src': pkt.ip.src,
+						'ip_dst': pkt.ip.dst,
+						'transport': pkt.transport_layer
+					}
 
-                    # Calculate Average RTT for the flow
-                    if self.flows[flow_key]['rtt_count'] > 0:
-                        packet_data['avg_rtt'] = self.flows[flow_key]['rtt_sum'] / self.flows[flow_key]['rtt_count']
-                    else:
-                        packet_data['avg_rtt'] = None
+					# TCP-specific features
+					if hasattr(pkt, 'tcp'):
+						packet_data.update({
+							'tcp_seq': int(pkt.tcp.seq) if hasattr(pkt.tcp,
+																   'seq') and pkt.tcp.seq.isnumeric() else None,
+							'tcp_ack': int(pkt.tcp.ack) if hasattr(pkt.tcp,
+																   'ack') and pkt.tcp.ack.isnumeric() else None,
+							'tcp_window': int(pkt.tcp.window_size) if hasattr(pkt.tcp,
+																			  'window_size') and pkt.tcp.window_size.isnumeric() else None,
+							'tcp_flags': int(pkt.tcp.flags, 16) if hasattr(pkt.tcp, 'flags') else None,
+						})
 
-                    packets.append(packet_data)
+					# TLS-specific features
+					if hasattr(pkt, 'tls'):
+						packet_data.update({
+							'tls_handshake_type': int(pkt.tls.handshake_type) if hasattr(pkt.tls,
+																						 'handshake_type') else None,
+							'tls_version': pkt.tls.record_version if hasattr(pkt.tls, 'record_version') else None,
+							'tls_cipher_suite': pkt.tls.cipher_suite if hasattr(pkt.tls, 'cipher_suite') else None
+						})
 
-                except Exception:
-                    continue  # Skip problematic packets
+					# Flow-level metrics
+					self.flows[flow_key]['size'] += packet_data['packet_size']
+					self.flows[flow_key]['volume'] += 1
+					packet_data['flow_size'] = self.flows[flow_key]['size']
+					packet_data['flow_volume'] = self.flows[flow_key]['volume']
 
-            cap.close()
-            df = pd.DataFrame(packets)
+					# Calculate Inter-Packet Time
+					if self.flows[flow_key]['last_timestamp'] is not None:
+						packet_data['inter_packet_time'] = packet_data['timestamp'] - self.flows[flow_key][
+							'last_timestamp']
+					else:
+						packet_data['inter_packet_time'] = None
+					self.flows[flow_key]['last_timestamp'] = packet_data['timestamp']
 
-            # Clean the dataframe using DataProcessor
-            df = DataProcessor.clean_dataframe(df)
+					# Append extracted packet data
+					packets.append(packet_data)
 
-            # Save to CSV
-            output_csv = CSV_DIR / f"{Path(self.pcap_file).stem}_parsed_data.csv"
-            DataProcessor.save_dataframe_to_csv(df, output_csv)
+				except Exception as e:
+					logging.warning(f"⚠ Error processing packet: {e}")
+					continue  # Skip the problematic packet
 
-            return df
+			cap.close()
+			df = pd.DataFrame(packets)
 
-        except Exception as e:
-            logging.error(f"❌ Error reading file {self.pcap_file}: {e}")
-            return pd.DataFrame()  # Return empty DataFrame if error occurs
+			# Clean the dataframe using DataProcessor
+			df = DataProcessor.clean_dataframe(df)
+
+			# Save to CSV
+			output_csv = Path(self.pcap_file).with_suffix('.csv')
+			DataProcessor.save_dataframe_to_csv(df, output_csv)
+
+			return df
+
+		except Exception as e:
+			logging.error(f"❌ Error reading file {self.pcap_file}: {e}")
+			return pd.DataFrame()  # Return empty DataFrame if error occurs

@@ -94,52 +94,6 @@ class TrafficVisualizer:
         plt.close()
 
 
-                # TLS Cipher Suites Distribution
-        # if 'tls_cipher_suite' in df.columns and df['tls_cipher_suite'].dropna().size > 0:
-        #     plt.figure(figsize=(12, 5))
-        #     sns.countplot(y=df['tls_cipher_suite'].dropna(), color='green')
-        #     plt.title(f'TLS Cipher Suites Used - {app_name}')
-        #     plt.xlabel('Count')
-        #     plt.ylabel('TLS Cipher Suite')
-        #     plt.savefig(f"{app_graph_dir}/{app_name}_tls_cipher_suite.png")
-        #     plt.close()
-
-        # TCP Sequence Number Distribution
-        # if 'tcp_seq' in df.columns and df['tcp_seq'].dropna().size > 0:
-        #     plt.figure(figsize=(12, 5))
-        #     sns.histplot(df['tcp_seq'].dropna(), bins=50, kde=True, color='blue')
-        #     plt.title(f'TCP Sequence Number Distribution - {app_name}')
-        #     plt.xlabel('TCP Sequence Number')
-        #     plt.ylabel('Count')
-        #     plt.xticks(rotation=45)
-        #     plt.savefig(f"{app_graph_dir}/{app_name}_tcp_seq.png")
-        #     plt.close()
-
-        # TCP Acknowledgment Number Distribution
-        # if 'tcp_ack' in df.columns and df['tcp_ack'].dropna().size > 0:
-        #     plt.figure(figsize=(12, 5))
-        #     sns.histplot(df['tcp_ack'].dropna(), bins=50, kde=True, color='purple')
-        #     plt.title(f'TCP Acknowledgment Number Distribution - {app_name}')
-        #     plt.xlabel('TCP Acknowledgment Number')
-        #     plt.ylabel('Count')
-        #     plt.xticks(rotation=45)
-        #     plt.savefig(f"{app_graph_dir}/{app_name}_tcp_ack.png")
-        #     plt.close()
-
-        # TCP Window Size Distribution
-        # if 'tcp_window' in df.columns and df['tcp_window'].dropna().size > 0:
-        #     plt.figure(figsize=(12, 5))
-        #     sns.histplot(df['tcp_window'].dropna(), bins=50, kde=True, color='red')
-        #     plt.title(f'TCP Window Size Distribution - {app_name}')
-        #     plt.xlabel('TCP Window Size')
-        #     plt.ylabel('Count')
-        #     plt.xticks(rotation=45)
-        #     plt.savefig(f"{app_graph_dir}/{app_name}_tcp_window.png")
-        #     plt.close()
-
-
-
-
     @staticmethod
     def compare_results(csv_file, output_dir="results/graphs/compare/"):
         """

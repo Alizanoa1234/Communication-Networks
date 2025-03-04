@@ -15,6 +15,8 @@ class DataProcessor:
 				median_value = df[col].median()
 				df[col] = df[col].fillna(median_value).astype(float)
 				df[col] = pd.to_numeric(df[col], errors='coerce')
+				if col not in df.columns:
+					df[col] = None  # Fill missing columns with default values
 
 		categorical_columns = ['protocol', 'ip_src', 'ip_dst', 'transport', 'tls_version',
 							   'tls_cipher_suite', 'tls_handshake_type']
