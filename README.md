@@ -98,6 +98,16 @@ After extracting data, generate comparison graphs for different applications:
 bash
 python src/traffic_visualizer.py
 
+## how to open on ubuntu
+
+1. sudo apt update && sudo apt install python3-venv python3-pip -y
+2. python3 -m venv venv
+3. source venv/bin/activate
+4. source venv/bin/activate
+5. pip install pandas numpy matplotlib scikit-learn seaborn tensorflow pyshark
+6. python src/main.py -o results/
+
+
 
 ### Using the Terminal or main in src  
 You can also use the *main.py* in *src* for data processing and analysis. There is an option to choose whether to *analyze new captures* or *classify data from an existing file*.
