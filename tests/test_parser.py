@@ -17,7 +17,7 @@ class TestPacketAnalyzer(unittest.TestCase):
     def setUpClass(cls):
         """Runs once before all tests to set up necessary paths."""
         cls.test_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data'))
-        cls.test_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'res', 'tests'))
+        cls.test_results_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'results', 'tests'))
         os.makedirs(cls.test_results_dir, exist_ok=True)
 
     def test_missing_file(self):

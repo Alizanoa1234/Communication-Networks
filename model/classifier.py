@@ -18,7 +18,7 @@ class TrafficClassifier:
 	def __init__(self, model_path):
 		self.model_path = model_path
 
-	def classify_new_data(self, input_file, output_file="res/classification_results.csv"):
+	def classify_new_data(self, input_file, output_file="results/classification_results.csv"):
 		print("🔹 Loading trained model...")
 		model = joblib.load(self.model_path)
 
@@ -30,10 +30,10 @@ class TrafficClassifier:
 		print("🔹 Performing classification...")
 		df['Predicted_Application'] = model.predict(X)
 
-		# Save res
+		# Save results
 		os.makedirs(os.path.dirname(output_file), exist_ok=True)
 		df.to_csv(output_file, index=False)
-		print(f"✅ Classification res saved in {output_file}")
+		print(f"✅ Classification results saved in {output_file}")
 
 if __name__ == "__main__":
     classifier = TrafficClassifier(MODEL_PATH)
